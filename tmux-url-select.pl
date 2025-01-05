@@ -9,11 +9,11 @@
 use strict;
 use warnings;
 
-use File::Which;
-
 ### config
 
 our $tmux_command = $ENV{TMUX_URL_SELECT_TMUX_CMD} || 'tmux';
+our $launch_url_binary = locate_launch_url_binary();
+our $yank_url_binary = locate_yank_url_binary();
 
 use constant SHOW_STATUS_BAR => 1;
 use constant VERBOSE_MESSAGES => 0;
@@ -120,6 +120,45 @@ sub single_quote_escape {
     return "'".(shift =~ s/\'/%27/gr)."'";
 }
 
+sub which {
+    my $binary = shift;
+    return `which $binary 2>/dev/null`;
+}
+
+sub locate_launch_url_binary {
+    if ($ENV{TMUX_URL_SELECT_OPEN_CMD}) {
+        return $ENV{TMUX_URL_SELECT_OPEN_CMD};
+    } elsif (which('xdg-open')) {
+        return 'xdg-open';
+    } elsif (which('open')) {
+        return 'open';
+    } else {
+        tmux_display_message("No xdg-open or open command found");
+        system $tmux_command, "delete-buffer";
+        exit 0;
+    }
+}
+
+sub locate_yank_url_binary {
+    if ($ENV{TMUX_URL_SELECT_CLIP_CMD}) {
+        return $ENV{TMUX_URL_SELECT_CLIP_CMD};
+    } elsif (which('xsel')) {
+        return 'xsel -i';
+    } elsif (which('xclip')) {
+        return 'xclip -i';
+    } elsif (which('wl-copy')) {
+        return 'wl-copy';
+    } elsif (which('pbcopy')) {
+        return 'pbcopy';
+    } elsif (which('clip.exe')) {
+        return 'clip.exe -i';
+    } else {
+        tmux_display_message("No xsel, xclip, wl-copy, pbcopy, or clip.exe command found");
+        system $tmux_command, "delete-buffer";
+        exit 0;
+    }
+}
+
 # actions
 
 sub fix_url {
@@ -142,27 +181,13 @@ sub safe_exec {
     }
 }
 
-sub locate_binary {
-    if ($ENV{TMUX_URL_SELECT_OPEN_CMD}) {
-        return $ENV{TMUX_URL_SELECT_OPEN_CMD};
-    } elsif (which('xdg-open')) {
-        return 'xdg-open';
-    } elsif (which('open')) {
-        return 'open';
-    } else {
-        tmux_display_message("No xdg-open or open command found");
-        system $tmux_command, "delete-buffer";
-        exit 0;
-    }
-}
-
 sub launch_url {
     my $url = fix_url(shift);
     tmux_switch_to_last() if shift;
 
     my $command = sprintf(
         "%s %s",
-        locate_binary(),
+        $launch_url_binary,
         single_quote_escape($url)
     );
     safe_exec($command, "Launched ". $url);
@@ -174,7 +199,7 @@ sub yank_url {
     my $command = sprintf(
         "echo %s | %s",
         single_quote_escape($url),
-        $ENV{TMUX_URL_SELECT_CLIP_CMD} || 'xclip -i'
+        $yank_url_binary
     );
     safe_exec($command, "Yanked ". $url);
 }
