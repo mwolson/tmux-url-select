@@ -3,7 +3,8 @@
 # tmux-url-select
 # mit licensed
 #
-# Adapted from https://github.com/dequis/tmux-url-select
+# URL: https://github.com/mwolson/tmux-url-select/
+# Adapted from https://github.com/dequis/tmux-url-select/
 
 use strict;
 use warnings;
