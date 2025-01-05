@@ -12,8 +12,8 @@ use warnings;
 ### config
 
 our $tmux_command = $ENV{TMUX_URL_SELECT_TMUX_CMD} || 'tmux';
-our $launch_url_binary = locate_launch_url_binary();
-our $yank_url_binary = locate_yank_url_binary();
+our $launch_url_command;
+our $yank_url_command;
 
 use constant SHOW_STATUS_BAR => 1;
 use constant VERBOSE_MESSAGES => 0;
@@ -125,13 +125,20 @@ sub which {
     return `which $binary 2>/dev/null`;
 }
 
-sub locate_launch_url_binary {
-    if ($ENV{TMUX_URL_SELECT_OPEN_CMD}) {
-        return $ENV{TMUX_URL_SELECT_OPEN_CMD};
-    } elsif (which('xdg-open')) {
-        return 'xdg-open';
-    } elsif (which('open')) {
-        return 'open';
+sub locate_launch_url_command {
+    if ($launch_url_command) {
+        return $launch_url_command;
+    }
+
+    foreach ($ENV{TMUX_URL_SELECT_OPEN_CMD}, 'xdg-open', 'open') {
+        if ($_ && which($_)) {
+            $launch_url_command = $_;
+            last;
+        }
+    }
+
+    if ($launch_url_command) {
+        return $launch_url_command;
     } else {
         tmux_display_message("No xdg-open or open command found");
         system $tmux_command, "delete-buffer";
@@ -139,21 +146,35 @@ sub locate_launch_url_binary {
     }
 }
 
-sub locate_yank_url_binary {
-    if ($ENV{TMUX_URL_SELECT_CLIP_CMD}) {
-        return $ENV{TMUX_URL_SELECT_CLIP_CMD};
-    } elsif (which('xsel')) {
-        return 'xsel -i';
-    } elsif (which('xclip')) {
-        return 'xclip -i';
-    } elsif (which('wl-copy')) {
-        return 'wl-copy';
-    } elsif (which('pbcopy')) {
-        return 'pbcopy';
-    } elsif (which('clip.exe')) {
-        return 'clip.exe -i';
+sub locate_yank_url_command {
+    if ($yank_url_command) {
+        return $yank_url_command;
+    }
+
+    my $select_yank_url_command = sub {
+        if ($ENV{TMUX_URL_SELECT_CLIP_CMD}) {
+            return $ENV{TMUX_URL_SELECT_CLIP_CMD};
+        } elsif (which('wl-copy')) {
+            return 'wl-copy';
+        } elsif (which('xsel')) {
+            return 'xsel -i';
+        } elsif (which('xclip')) {
+            return 'xclip -i';
+        } elsif (which('pbcopy')) {
+            return 'pbcopy';
+        } elsif (which('clip.exe')) {
+            return 'clip.exe';
+        } else {
+            return '';
+        }
+    };
+
+    $yank_url_command = $select_yank_url_command->();
+
+    if ($yank_url_command) {
+        return $yank_url_command;
     } else {
-        tmux_display_message("No xsel, xclip, wl-copy, pbcopy, or clip.exe command found");
+        tmux_display_message("No wl-copy, xsel, xclip, pbcopy, or clip.exe command found");
         system $tmux_command, "delete-buffer";
         exit 0;
     }
@@ -187,7 +208,7 @@ sub launch_url {
 
     my $command = sprintf(
         "%s %s",
-        $launch_url_binary,
+        locate_launch_url_command(),
         single_quote_escape($url)
     );
     safe_exec($command, "Launched ". $url);
@@ -199,7 +220,7 @@ sub yank_url {
     my $command = sprintf(
         "echo %s | %s",
         single_quote_escape($url),
-        $yank_url_binary
+        locate_yank_url_command()
     );
     safe_exec($command, "Yanked ". $url);
 }
