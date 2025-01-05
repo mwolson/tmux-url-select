@@ -3,9 +3,12 @@
 # tmux-url-select
 # mit licensed
 #
+# Adapted from https://github.com/dequis/tmux-url-select
 
 use strict;
 use warnings;
+
+use File::Which;
 
 ### config
 
@@ -138,13 +141,27 @@ sub safe_exec {
     }
 }
 
+sub locate_binary {
+    if ($ENV{TMUX_URL_SELECT_OPEN_CMD}) {
+        return $ENV{TMUX_URL_SELECT_OPEN_CMD};
+    } elsif (which('xdg-open')) {
+        return 'xdg-open';
+    } elsif (which('open')) {
+        return 'open';
+    } else {
+        tmux_display_message("No xdg-open or open command found");
+        system $tmux_command, "delete-buffer";
+        exit 0;
+    }
+}
+
 sub launch_url {
     my $url = fix_url(shift);
     tmux_switch_to_last() if shift;
 
     my $command = sprintf(
         "%s %s",
-        $ENV{TMUX_URL_SELECT_OPEN_CMD} || 'xdg-open',
+        locate_binary(),
         single_quote_escape($url)
     );
     safe_exec($command, "Launched ". $url);
